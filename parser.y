@@ -32,9 +32,14 @@ Node* createNode(const char* name, const char* value, Node* left, Node* right) {
     return newNode;
 }
 
-/* Imprime a árvore sintática (com indentação) */
+/* Função de impressão da árvore sintática */
 void printTree(Node* root, int level) {
     if (root == NULL) return;
+    /* Se o nó for um nó "transparente" de item de expressão, apenas imprima seu filho esquerdo */
+    if (strcmp(root->name, "expr_item") == 0) {
+        printTree(root->left, level);
+        return;
+    }
     for (int i = 0; i < level; i++) 
         printf("  ");
     if (strlen(root->value) > 0)
@@ -66,7 +71,7 @@ int yylex();
     Node* node;
 }
 
-/* Tokens – estes devem coincidir com os retornados pelo scanner */
+/* Tokens – devem coincidir com os retornados pelo scanner */
 %token <str> ID NUM STRING_LITERAL
 %token INT FLOAT CHAR VOID PUBLIC PRINTF SCANF EXIT STATIC ARGS IF ELSE FOR WHILE BREAK SWITCH CASE DEFAULT DO TYPEDEF STRUCT RETURN
 %token ASSIGN PLUS MINUS MULT DIV LPAREN RPAREN LBRACE RBRACE SEMICOLON
@@ -83,20 +88,22 @@ int yylex();
 %left PLUS MINUS
 %left MULT DIV
 
-%type <node> programa lista_stmt stmt decl atr if_stmt bloco expressao tipo
+/* Não-terminais que carregam árvore sintática */
+%type <node> program statement_list stmt decl atr if_stmt while_stmt func_def return_stmt bloco expressao tipo lvalue 
+%type <node> expr_list non_empty_expr_list param_list param_decl arg_list
 
 %%
 
-programa:
-    lista_stmt {
+program:
+    statement_list { 
         printf("Árvore Sintática:\n");
         printTree($1, 0);
         freeTree($1);
     }
     ;
 
-lista_stmt:
-    lista_stmt stmt { $$ = createNode("lista_stmt", NULL, $1, $2); }
+statement_list:
+    statement_list stmt { $$ = createNode("statement_list", NULL, $1, $2); }
     | stmt { $$ = $1; }
     ;
 
@@ -104,44 +111,96 @@ stmt:
       decl                { $$ = $1; }
     | atr                 { $$ = $1; }
     | if_stmt             { $$ = $1; }
+    | while_stmt          { $$ = $1; }
+    | func_def            { $$ = $1; }
+    | return_stmt         { $$ = $1; }
     | bloco               { $$ = $1; }
     ;
 
-/* Declaração com ou sem inicialização */
+/* --- Declaração de Variáveis e Vetores --- */
 decl:
-      tipo ID SEMICOLON {
-           $$ = createNode("decl", NULL, $1, createNode("ID", $2, NULL, NULL));
+      tipo ID LBRACKET NUM RBRACKET ASSIGN LBRACE expr_list RBRACE SEMICOLON {
+           $$ = createNode("decl-array-init", NULL, 
+                        createNode("decl-array", NULL, $1, createNode("ID", $2, NULL, NULL)),
+                        $8);
+      }
+    | tipo ID LBRACKET NUM RBRACKET SEMICOLON {
+           $$ = createNode("decl-array", NULL, $1, createNode("ID", $2, NULL, NULL));
       }
     | tipo ID ASSIGN expressao SEMICOLON {
            $$ = createNode("decl-init", NULL, createNode("ID", $2, NULL, NULL), $4);
       }
+    | tipo ID SEMICOLON {
+           $$ = createNode("decl", NULL, $1, createNode("ID", $2, NULL, NULL));
+      }
     ;
 
-/* Atribuição */
+/* --- Lado Esquerdo (lvalue) --- */
+lvalue:
+      ID { $$ = createNode("ID", $1, NULL, NULL); }
+    | ID LBRACKET expressao RBRACKET { $$ = createNode("array_access", NULL, createNode("ID", $1, NULL, NULL), $3); }
+    ;
+
 atr:
-    ID ASSIGN expressao SEMICOLON {
-         $$ = createNode("atribuicao", NULL, createNode("ID", $1, NULL, NULL), $3);
-    }
+    lvalue ASSIGN expressao SEMICOLON { $$ = createNode("atribuicao", NULL, $1, $3); }
     ;
 
-/* Comando if com ou sem else – a primeira produção tem precedência menor que ELSE */
+/* --- Comandos Condicionais e de Repetição --- */
 if_stmt:
-    IF LPAREN expressao RPAREN stmt %prec LOWER_THAN_ELSE {
-         $$ = createNode("if", NULL, $3, $5);
-    }
-    | IF LPAREN expressao RPAREN stmt ELSE stmt {
-         $$ = createNode("if-else", NULL, createNode("if", NULL, $3, $5), $7);
-    }
+    IF LPAREN expressao RPAREN stmt %prec LOWER_THAN_ELSE { $$ = createNode("if", NULL, $3, $5); }
+    | IF LPAREN expressao RPAREN stmt ELSE stmt { $$ = createNode("if-else", NULL, createNode("if", NULL, $3, $5), $7); }
     ;
 
-/* Bloco composto por lista de sentenças */
+while_stmt:
+    WHILE LPAREN expressao RPAREN stmt { $$ = createNode("while", NULL, $3, $5); }
+    ;
+
+/* --- Comando Return --- */
+return_stmt:
+    RETURN SEMICOLON { $$ = createNode("return", "void", NULL, NULL); }
+    | RETURN expressao SEMICOLON { $$ = createNode("return", NULL, $2, NULL); }
+    ;
+
+/* --- Bloco --- */
 bloco:
-    LBRACE lista_stmt RBRACE { $$ = $2; }
+    LBRACE statement_list RBRACE { $$ = $2; }
     ;
 
-/* Expressões aritméticas e relacionais */
+/* --- Definição de Função --- */
+func_def:
+    tipo ID LPAREN param_list RPAREN bloco { 
+         $$ = createNode("func_def", NULL, createNode("func_sign", $2, $1, $4), $6); 
+    }
+    | VOID ID LPAREN param_list RPAREN bloco { 
+         $$ = createNode("func_def", NULL, 
+                 createNode("func_sign", $2, createNode("tipo", "void", NULL, NULL), $4), $6); 
+    }
+    ;
+
+/* --- Parâmetros e Argumentos --- */
+param_list:
+      VOID { $$ = NULL; }
+    | /* empty */ { $$ = NULL; }
+    | param_decl { $$ = $1; }
+    | param_list COMMA param_decl { $$ = createNode("param_list", NULL, $1, $3); }
+    ;
+
+
+param_decl:
+    tipo ID { $$ = createNode("param", NULL, $1, createNode("ID", $2, NULL, NULL)); }
+    ;
+
+arg_list:
+      /* empty */ { $$ = NULL; }
+    | expressao { $$ = $1; }
+    | arg_list COMMA expressao { $$ = createNode("arg_list", NULL, $1, $3); }
+    ;
+
+/* --- Expressões --- */
 expressao:
-      expressao PLUS expressao  { $$ = createNode("+", NULL, $1, $3); }
+      ID LPAREN arg_list RPAREN { $$ = createNode("call", $1, $3, NULL); }
+    | ID LBRACKET expressao RBRACKET { $$ = createNode("array_access", NULL, createNode("ID", $1, NULL, NULL), $3); }
+    | expressao PLUS expressao  { $$ = createNode("+", NULL, $1, $3); }
     | expressao MINUS expressao { $$ = createNode("-", NULL, $1, $3); }
     | expressao MULT expressao  { $$ = createNode("*", NULL, $1, $3); }
     | expressao DIV expressao   { $$ = createNode("/", NULL, $1, $3); }
@@ -151,23 +210,34 @@ expressao:
     | expressao GE expressao    { $$ = createNode(">=", NULL, $1, $3); }
     | expressao EQEQ expressao  { $$ = createNode("==", NULL, $1, $3); }
     | expressao NE expressao    { $$ = createNode("!=", NULL, $1, $3); }
-    | NUM                     { $$ = createNode("NUM", $1, NULL, NULL); }
-    | ID                      { $$ = createNode("ID", $1, NULL, NULL); }
+    | expressao SEMICOLON { $$ = $1; }
+    | NUM { $$ = createNode("NUM", $1, NULL, NULL); }
+    | ID  { $$ = createNode("ID", $1, NULL, NULL); }
     | LPAREN expressao RPAREN { $$ = $2; }
     ;
 
+/* --- Tipos --- */
 tipo:
       INT   { $$ = createNode("tipo", "int", NULL, NULL); }
     | FLOAT { $$ = createNode("tipo", "float", NULL, NULL); }
     | CHAR  { $$ = createNode("tipo", "char", NULL, NULL); }
     ;
 
+/* --- Lista de Expressões (para inicializadores) --- */
+expr_list:
+      non_empty_expr_list { $$ = $1; }
+    ;
+
+non_empty_expr_list:
+      expressao { $$ = createNode("expr_item", "", $1, NULL); }
+    | non_empty_expr_list COMMA expressao { $$ = createNode("expr_list", "", $1, createNode("expr_item", "", $3, NULL)); }
+    ;
+
 %%
 
 /* Declaramos a variável yydebug para permitir a ativação do modo de debug */
 int yydebug = 0;
-
-/* A variável output_file será utilizada pelo scanner também */
+/* A variável output_file será utilizada tanto pelo parser quanto pelo scanner */
 FILE *output_file;
 
 int main() {

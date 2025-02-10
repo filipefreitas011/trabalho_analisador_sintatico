@@ -2,3 +2,5 @@
 *.out
 lex.yy.c
 parser.tab.*
+.vscode
+parser

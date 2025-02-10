@@ -42,7 +42,6 @@ void add_identifier(char *id, char *type) {
 DIGIT       [0-9]+
 ID          [a-zA-Z_][a-zA-Z0-9]*
 FLOAT       [0-9]+\.[0-9]+
-/* WHITESPACE agora inclui \r para compatibilidade com Windows */
 WHITESPACE  [ \t\r\n]+
 STRING      \"(\\.|[^\"\\])*\"
 
@@ -89,6 +88,8 @@ return    { fprintf(output_file, "<return> "); return RETURN; }
 ")"       { fprintf(output_file, "<)> ");    return RPAREN; }
 "{"       { fprintf(output_file, "<{> ");    return LBRACE; }
 "}"       { fprintf(output_file, "<}> ");    return RBRACE; }
+"["       { fprintf(output_file, "<[> ");    return LBRACKET; }
+"]"       { fprintf(output_file, "<]> ");    return RBRACKET; }
 ";"       { fprintf(output_file, "<;> ");    return SEMICOLON; }
 ","       { fprintf(output_file, "<,> ");    return COMMA; }
 "%"       { fprintf(output_file, "<%%> ");   return PERCENT; }
