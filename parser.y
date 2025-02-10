@@ -32,10 +32,10 @@ Node* createNode(const char* name, const char* value, Node* left, Node* right) {
     return newNode;
 }
 
-/* Função de impressão da árvore sintática */
+/* Imprime a árvore sintática (com indentação) na saída padrão */
+/* Se o nó for "expr_item", ele será tratado como transparente */
 void printTree(Node* root, int level) {
     if (root == NULL) return;
-    /* Se o nó for um nó "transparente" de item de expressão, apenas imprima seu filho esquerdo */
     if (strcmp(root->name, "expr_item") == 0) {
         printTree(root->left, level);
         return;
@@ -48,6 +48,24 @@ void printTree(Node* root, int level) {
         printf("%s\n", root->name);
     printTree(root->left, level + 1);
     printTree(root->right, level + 1);
+}
+
+/* Imprime a árvore sintática (com indentação) em um arquivo */
+void printTreeToFile(Node* root, int level, FILE* out) {
+    if (root == NULL) return;
+    /* Se o nó for "expr_item", imprima somente seu filho esquerdo (transparente) */
+    if (strcmp(root->name, "expr_item") == 0) {
+        printTreeToFile(root->left, level, out);
+        return;
+    }
+    for (int i = 0; i < level; i++) 
+        fprintf(out, "  ");
+    if (strlen(root->value) > 0)
+        fprintf(out, "%s (%s)\n", root->name, root->value);
+    else
+        fprintf(out, "%s\n", root->name);
+    printTreeToFile(root->left, level + 1, out);
+    printTreeToFile(root->right, level + 1, out);
 }
 
 /* Libera a memória da árvore */
@@ -98,6 +116,14 @@ program:
     statement_list { 
         printf("Árvore Sintática:\n");
         printTree($1, 0);
+        /* Abre o arquivo output_sin.txt para gravar a árvore sintática */
+        FILE *sin_file = fopen("output_sin.txt", "w");
+        if (sin_file == NULL) {
+            fprintf(stderr, "Erro ao abrir output_sin.txt\n");
+            exit(1);
+        }
+        printTreeToFile($1, 0, sin_file);
+        fclose(sin_file);
         freeTree($1);
     }
     ;
@@ -115,6 +141,7 @@ stmt:
     | func_def            { $$ = $1; }
     | return_stmt         { $$ = $1; }
     | bloco               { $$ = $1; }
+    | expressao SEMICOLON { $$ = $1; }
     ;
 
 /* --- Declaração de Variáveis e Vetores --- */
@@ -169,11 +196,11 @@ bloco:
 /* --- Definição de Função --- */
 func_def:
     tipo ID LPAREN param_list RPAREN bloco { 
-         $$ = createNode("func_def", NULL, createNode("func_sign", $2, $1, $4), $6); 
+         $$ = createNode("func_def", NULL, createNode("func_sig", $2, $1, $4), $6); 
     }
     | VOID ID LPAREN param_list RPAREN bloco { 
          $$ = createNode("func_def", NULL, 
-                 createNode("func_sign", $2, createNode("tipo", "void", NULL, NULL), $4), $6); 
+                 createNode("func_sig", $2, createNode("tipo", "void", NULL, NULL), $4), $6); 
     }
     ;
 
@@ -184,7 +211,6 @@ param_list:
     | param_decl { $$ = $1; }
     | param_list COMMA param_decl { $$ = createNode("param_list", NULL, $1, $3); }
     ;
-
 
 param_decl:
     tipo ID { $$ = createNode("param", NULL, $1, createNode("ID", $2, NULL, NULL)); }
@@ -210,7 +236,6 @@ expressao:
     | expressao GE expressao    { $$ = createNode(">=", NULL, $1, $3); }
     | expressao EQEQ expressao  { $$ = createNode("==", NULL, $1, $3); }
     | expressao NE expressao    { $$ = createNode("!=", NULL, $1, $3); }
-    | expressao SEMICOLON { $$ = $1; }
     | NUM { $$ = createNode("NUM", $1, NULL, NULL); }
     | ID  { $$ = createNode("ID", $1, NULL, NULL); }
     | LPAREN expressao RPAREN { $$ = $2; }
@@ -230,7 +255,7 @@ expr_list:
 
 non_empty_expr_list:
       expressao { $$ = createNode("expr_item", "", $1, NULL); }
-    | non_empty_expr_list COMMA expressao { $$ = createNode("expr_list", "", $1, createNode("expr_item", "", $3, NULL)); }
+    | expressao COMMA non_empty_expr_list { $$ = createNode("expr_list", "", createNode("expr_item", "", $1, NULL), $3); }
     ;
 
 %%
