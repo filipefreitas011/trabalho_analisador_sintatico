@@ -1,7 +1,46 @@
+// Declaração de variáveis simples e inicialização
 int x;
 x = 5;
-if (x < 3) {
+float y = 2.5;
+
+// Declaração e inicialização de um vetor
+int arr[3] = { 10, 20, 30 };
+arr[1] = 25;
+
+// Comando condicional if-else
+if (x < 10) {
     x = x + 1;
 } else {
     x = x - 1;
 }
+
+// Comando de repetição while
+while (x < 20) {
+    x = x + 2;
+}
+
+// Definição de função que retorna um inteiro
+int sum(int a, int b) {
+    int s;
+    s = a + b;
+    return s;
+}
+
+// Definição de função que retorna um float
+float f(void) {
+    float z;
+    z = 3.14;
+    return z;
+}
+
+// Definição de função void
+void display(int val) {
+    // (Imaginando uma função que imprime o valor)
+    // Esta função não retorna nada.
+    return;
+}
+
+// Chamada de funções e acesso a vetor
+x = sum(x, arr[1]);
+y = f();
+display(x);

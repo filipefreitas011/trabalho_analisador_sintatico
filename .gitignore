@@ -1,0 +1,8 @@
+*.lex
+*.out
+lex.yy.c
+parser.tab.*
+.vscode
+parser
+output_sin.txt
+output.lex
